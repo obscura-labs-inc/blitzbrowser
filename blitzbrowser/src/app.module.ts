@@ -12,6 +12,7 @@ import { BrowserPoolController } from './controllers/browser-pool.controller';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { ApiKeyGuard } from './guards/api-key.guard';
+import { BrowserVersionService } from './services/browser-version.service';
 
 const user_data_providers: Provider[] = Object.keys(process.env).filter(k => k.startsWith('S3_')).length === 0
   ? [
@@ -64,6 +65,7 @@ const user_data_providers: Provider[] = Object.keys(process.env).filter(k => k.s
 
     TimezoneService,
     BrowserPoolService,
+    BrowserVersionService,
 
     ...user_data_providers,
   ],
