@@ -41,6 +41,7 @@ Connect to headful browsers from Puppeteer, Playwright and any CDP frameworks. P
 - [**Proxy Support**](https://docs.blitzbrowser.com/self-hosted/features/http-proxy) - Connect your browsers to any HTTP proxies.
 - [**Security**](https://docs.blitzbrowser.com/self-hosted/features/security) - Control who can access the browsers.
 - [**Chrome DevTools Protocol**](https://docs.blitzbrowser.com/self-hosted/configurations/chrome-devtools-protocol) - No proprietary SDK. Connect directly from Puppeteer, Playwright or any CDP supported framework.
+- **Versions** - Run any google chrome version from 116 to the latest one.
 - **Parallelism** - Spin up and run multiple browsers concurrently.
 - **Headful** - Run the browsers with a GUI to render exactly as a user would see.
 - **Queueing** - CDP connections are automatically queued while the browsers are starting.
