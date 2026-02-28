@@ -32,6 +32,7 @@ Connect to headful browsers from Puppeteer, Playwright and any CDP frameworks. P
 - [Features](#features)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Changlog](#changelog)
 - [Support](#support)
 
 ## Features
@@ -172,6 +173,38 @@ The developer documentation is available at [https://docs.blitzbrowser.com](http
 - [Persist the user data with S3](https://docs.blitzbrowser.com/features/user-data-storage)
 - [Run any Google Chrome version](https://docs.blitzbrowser.com/features/google-chrome-versions)
 - [Configure your browser](https://docs.blitzbrowser.com/features/chrome-devtools-protocol)
+
+## Changelog
+
+### 1.5.0
+
+February 28, 2026
+
+- Support running any [Google Chrome version](https://docs.blitzbrowser.com/features/google-chrome-versions) since 116.
+
+### 1.4.0
+
+February 15, 2026
+
+- Browser user data can now be stored on local disk or with an S3 provider. All details [here](https://docs.blitzbrowser.com/features/user-data-storage).
+
+### 1.3.0
+
+February 14, 2026
+
+- BlitzBrowser and the dashboard now support [authentication](https://docs.blitzbrowser.com/features/security).
+
+### 1.2.0
+
+February 1, 2026
+
+- Added [Live View](/features/live-view) and the [dashboard](https://docs.blitzbrowser.com/features/dashboard).
+
+### 1.1.4
+
+January 15, 2026
+
+- Released the open source version of BlitzBrowser.com(Cloud version, now closed).
 
 ## Support
 
