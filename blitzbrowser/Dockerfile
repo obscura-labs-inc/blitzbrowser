@@ -14,6 +14,9 @@ RUN chmod -R 777 /.cache/fontconfig
 RUN mkdir -p /blitzbrowser/user-data
 RUN chmod -R 777 /blitzbrowser/user-data
 
+RUN mkdir -p /blitzbrowser/browsers
+RUN chmod -R 777 /blitzbrowser/browsers
+
 USER $PPTRUSER_UID
 
 RUN mkdir /home/pptruser/user-data

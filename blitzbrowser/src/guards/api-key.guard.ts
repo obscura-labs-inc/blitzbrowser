@@ -37,7 +37,6 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     canActivateWebsocket(request: IncomingMessage, url: URL): boolean {
-        console.log(this.#skip_authentication, this.#api_key)
         if (this.#skip_authentication) {
             return true;
         }

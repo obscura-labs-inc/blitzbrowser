@@ -6,7 +6,7 @@ services:
     ports:
       - "9999:9999"
     volumes:
-      - ./user-data:/blitzbrowser/user-data
+      - ./blitzbrowser-data:/blitzbrowser
     environment:
       API_KEY: asd
       # S3_ENDPOINT: http://s3:9000

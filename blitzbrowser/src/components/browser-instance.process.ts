@@ -15,6 +15,8 @@ class BrowserInstanceProcess {
     readonly #proxy_server_port = parseInt(process.env.PROXY_SERVER_PORT);
     readonly #timezone = process.env.TZ;
     readonly #user_data_folder = process.env.USER_DATA_FOLDER;
+    readonly #browser_executable_path = process.env.BROWSER_EXECUTABLE_PATH;
+    readonly #disable_shm = process.env.DISABLE_SHM === 'true';
 
     #xvfb_process: ChildProcess;
     #x11vnc_process: ChildProcess;
@@ -169,7 +171,7 @@ class BrowserInstanceProcess {
 
         this.#puppeteer_process = await puppeteer.launch({
             headless: false,
-            executablePath: puppeteer.executablePath(),
+            executablePath: this.#browser_executable_path,
             userDataDir: this.#user_data_folder,
             dumpio: true,
             handleSIGTERM: false,
@@ -196,7 +198,7 @@ class BrowserInstanceProcess {
                 '--disable-features=PersistentHistograms', // Prevents generation of BrowserMetrics files on disk
                 `--start-maximized`,
                 `--proxy-server=http://127.0.0.1:${this.#proxy_server_port}`,
-                process.env.DISABLE_SHM === 'true' ? '--disable-dev-shm-usage' : undefined
+                this.#disable_shm ? '--disable-dev-shm-usage' : undefined
             ].filter(s => typeof s === 'string'),
             env: {
                 TZ: this.#timezone

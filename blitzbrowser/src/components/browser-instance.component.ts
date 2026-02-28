@@ -54,6 +54,7 @@ export interface ConnectionOptions {
   user_data_id?: string;
   user_data_read_only?: boolean;
   vnc_enabled: boolean;
+  browser_executable_path: string;
 }
 
 /**
@@ -430,7 +431,8 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
           VNC_ENABLED: `${this.vnc_enabled}`,
           PROXY_SERVER_PORT: `${this.#proxy_server.port}`,
           USER_DATA_FOLDER: this.#user_data_folder,
-          TZ: this.#timezone
+          TZ: this.#timezone,
+          BROWSER_EXECUTABLE_PATH: this.#connection_options.browser_executable_path,
         }
       }
     );

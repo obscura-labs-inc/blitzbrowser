@@ -5,12 +5,15 @@ import { WebSocket } from 'ws';
 import z from 'zod';
 import { Message, Tunnel } from '@blitzbrowser/tunnel';
 import { MaxBrowserReachedError } from 'src/errors/max-browser-reached.error';
+import { BrowserVersionService } from 'src/services/browser-version.service';
 
 export const PROXY_URL_QUERY_PARAM = 'proxyUrl';
 export const TIMEZONE_QUERY_PARAM = 'timezone';
 export const USER_DATA_ID_QUERY_PARAM = 'userDataId';
 export const USER_DATA_READ_ONLY_QUERY_PARAM = 'userDataReadOnly';
 export const LIVE_VIEW_QUERY_PARAM = 'liveView';
+export const BROWSER_FAMILY_QUERY_PARAM = 'browserFamily';
+export const BROWSER_VERSION_QUERY_PARAM = 'browserVersion';
 
 const ConnectionOptionQueryParams = z.object({
   proxy_url: z.url().optional(),
@@ -18,6 +21,8 @@ const ConnectionOptionQueryParams = z.object({
   user_data_id: z.string().optional(),
   user_data_read_only: z.boolean().optional().default(false),
   live_view: z.boolean().optional().default(false),
+  browser_family: z.string().optional().default('chrome'),
+  browser_version: z.string().optional().default('default'),
 });
 
 type ConnectionOptionQueryParams = z.infer<typeof ConnectionOptionQueryParams>;
@@ -35,6 +40,7 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
 
   constructor(
     private readonly browser_pool_service: BrowserPoolService,
+    private readonly browser_version_service: BrowserVersionService,
   ) { }
 
   onModuleDestroy() {
@@ -68,6 +74,22 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
         tunnel.receiveMessage(Message.of(BrowserInstance.CDP_CHANNEL_ID, message.toString('utf8')));
       });
 
+      const { browser_family, browser_version } = parsed_connection_options.data;
+
+      try {
+        if (await this.browser_version_service.isValidVersion(browser_family, browser_version)) {
+          if (!await this.browser_version_service.isVersionInstalled(browser_family, browser_version)) {
+            await this.browser_version_service.installVersion(browser_family, browser_version);
+          }
+        } else {
+          throw `Invalid browser version.`;
+        }
+      } catch (e) {
+        this.#logger.error(`Error while checking browser version: ${e}`);
+        cdp_websocket_client.close(CDPWebSocketGateway.BAD_REQUEST_CODE, typeof e === 'string' ? e : 'Error with browser version manager.');
+        return;
+      }
+
       const browser_instance: BrowserInstance = await this.#getBrowserInstance();
 
       const ping_interval_id = setInterval(() => {
@@ -93,6 +115,7 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
           user_data_id: parsed_connection_options.data.user_data_id,
           user_data_read_only: parsed_connection_options.data.user_data_read_only,
           vnc_enabled: parsed_connection_options.data.live_view === true,
+          browser_executable_path: this.browser_version_service.getExecutablePath(browser_family, browser_version),
         } satisfies ConnectionOptions
       } satisfies ConnectionOptionsEvent)));
 
@@ -143,6 +166,8 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
       user_data_id: this.getQueryParamValue(USER_DATA_ID_QUERY_PARAM, url),
       user_data_read_only: this.getQueryParamValue(USER_DATA_READ_ONLY_QUERY_PARAM, url)?.toLowerCase() === 'true',
       live_view: this.getQueryParamValue(LIVE_VIEW_QUERY_PARAM, url)?.toLowerCase() === 'true',
+      browser_family: this.getQueryParamValue(BROWSER_FAMILY_QUERY_PARAM, url),
+      browser_version: this.getQueryParamValue(BROWSER_VERSION_QUERY_PARAM, url),
     });
   }
 

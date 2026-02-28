@@ -36,11 +36,12 @@ Connect to headful browsers from Puppeteer, Playwright and any CDP frameworks. P
 
 ## Features
 
-- [**Live View**](https://docs.blitzbrowser.com/self-hosted/features/live-view) - Watch and interact directly with any browser currently running.
-- [**Persistent Sessions**](https://docs.blitzbrowser.com/self-hosted/features/user-data-storage) - Persist your browser user data.
-- [**Proxy Support**](https://docs.blitzbrowser.com/self-hosted/features/http-proxy) - Connect your browsers to any HTTP proxies.
-- [**Security**](https://docs.blitzbrowser.com/self-hosted/features/security) - Control who can access the browsers.
-- [**Chrome DevTools Protocol**](https://docs.blitzbrowser.com/self-hosted/configurations/chrome-devtools-protocol) - No proprietary SDK. Connect directly from Puppeteer, Playwright or any CDP supported framework.
+- [**Live View**](https://docs.blitzbrowser.com/features/live-view) - Watch and interact directly with any browser currently running.
+- [**Persistent Sessions**](https://docs.blitzbrowser.com/features/user-data-storage) - Persist your browser user data.
+- [**Proxy Support**](https://docs.blitzbrowser.com/features/http-proxy) - Connect your browsers to any HTTP proxies.
+- [**Security**](https://docs.blitzbrowser.com/features/security) - Control who can access the browsers.
+- [**Chrome DevTools Protocol**](https://docs.blitzbrowser.com/configurations/chrome-devtools-protocol) - No proprietary SDK. Connect directly from Puppeteer, Playwright or any CDP supported framework.
+- [**Google Chrome Versions**](https://docs.blitzbrowser.com/features/google-chrome-versions) - Run any google chrome version from 116 to the latest one.
 - **Parallelism** - Spin up and run multiple browsers concurrently.
 - **Headful** - Run the browsers with a GUI to render exactly as a user would see.
 - **Queueing** - CDP connections are automatically queued while the browsers are starting.
@@ -167,9 +168,10 @@ The developer documentation is available at [https://docs.blitzbrowser.com](http
 
 ### Quick Links
 
-- [Getting Started](https://docs.blitzbrowser.com/self-hosted/getting-started)
-- [Persist the user data with S3](https://docs.blitzbrowser.com/self-hosted/user-data-storage)
-- [Configure your browser session](https://docs.blitzbrowser.com/self-hosted/chrome-devtools-protocol)
+- [Getting Started](https://docs.blitzbrowser.com/getting-started)
+- [Persist the user data with S3](https://docs.blitzbrowser.com/features/user-data-storage)
+- [Run any Google Chrome version](https://docs.blitzbrowser.com/features/google-chrome-versions)
+- [Configure your browser](https://docs.blitzbrowser.com/features/chrome-devtools-protocol)
 
 ## Support
 
