@@ -26,9 +26,6 @@ importers:
       '@nestjs/schedule':
         specifier: ^6.1.0
         version: 6.1.0(@nestjs/common@11.1.12(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.12)
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       axios:
         specifier: ^1.12.2
         version: 1.12.2
@@ -69,6 +66,9 @@ importers:
       '@types/express':
         specifier: ^4.17.17
         version: 4.17.23
+      '@types/fs-extra':
+        specifier: ^11.0.4
+        version: 11.0.4
       '@types/http-proxy':
         specifier: ^1.17.16
         version: 1.17.16
