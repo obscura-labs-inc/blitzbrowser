@@ -3,6 +3,8 @@ import { env } from '$env/dynamic/private';
 
 const COOKIE_SESSION_ID = 'SESSION_ID';
 
+const is_https_required = env.HTTPS_DISABLED !== 'true';
+
 const is_authentication_required = typeof env.AUTH_KEY === 'string';
 
 const auth_key_sha256 = is_authentication_required ? await digest(env.AUTH_KEY) : undefined;
@@ -16,7 +18,11 @@ export async function authenticate(auth_key: string, cookies: Cookies) {
         return false;
     }
 
-    cookies.set(COOKIE_SESSION_ID, auth_key_sha256, { path: '/', httpOnly: true });
+    cookies.set(COOKIE_SESSION_ID, auth_key_sha256, {
+        path: '/',
+        httpOnly: true,
+        secure: is_https_required
+    });
 
     return true;
 }

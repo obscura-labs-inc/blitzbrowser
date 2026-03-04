@@ -177,6 +177,12 @@ The developer documentation is available at [https://docs.blitzbrowser.com](http
 
 ## Changelog
 
+### 1.6.0
+
+March 3, 2026
+
+- Dashboard doesn't require HTTPS to authenticate if environment variable `HTTPS_DISABLED=true` is configured.
+
 ### 1.5.0
 
 February 28, 2026
