@@ -112,6 +112,25 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
     return browser_instance;
   }
 
+  async closeStaleInstances(max_age_seconds: number): Promise<string[]> {
+    const now = Date.now();
+    const closed: string[] = [];
+
+    for (const instance of this.#browser_instances.values()) {
+      const connected_at = instance.status.connected_at;
+      if (!connected_at) continue;
+
+      const age_seconds = (now - new Date(connected_at).getTime()) / 1000;
+      if (age_seconds > max_age_seconds) {
+        this.logger.log(`Closing stale instance ${instance.id} (age=${Math.floor(age_seconds)}s)`);
+        closed.push(instance.id);
+        await instance.close();
+      }
+    }
+
+    return closed;
+  }
+
   async shutdown() {
     if (this.#sigterm_received) {
       return;
