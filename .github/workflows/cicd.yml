@@ -30,6 +30,9 @@ jobs:
       contents: read
       packages: write
     strategy:
+      # Build each image independently: a failure in one (e.g. dashboard) must not
+      # cancel the others, so a broken dashboard build can't block publishing blitzbrowser.
+      fail-fast: false
       matrix:
         include:
           - name: blitzbrowser
