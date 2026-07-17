@@ -1,6 +1,6 @@
 {
   "name": "@blitzbrowser/blitzbrowser",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Deploying, scaling and managing headful browsers in docker.",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
