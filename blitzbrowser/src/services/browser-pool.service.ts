@@ -114,8 +114,8 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
 
   async closeStaleInstances(max_age_seconds: number): Promise<string[]> {
     const now = Date.now();
-    const closed: string[] = [];
 
+    const stale: BrowserInstance[] = [];
     for (const instance of this.#browser_instances.values()) {
       const connected_at = instance.status.connected_at;
       if (!connected_at) continue;
@@ -123,10 +123,44 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
       const age_seconds = (now - new Date(connected_at).getTime()) / 1000;
       if (age_seconds > max_age_seconds) {
         this.logger.log(`Closing stale instance ${instance.id} (age=${Math.floor(age_seconds)}s)`);
-        closed.push(instance.id);
-        await instance.close();
+        stale.push(instance);
       }
     }
+
+    // Close concurrently and time-box each close(). A single wedged Chrome whose
+    // close() never resolves (it ignores SIGTERM, or an S3 upload inside close()
+    // hangs) must not block the other closes or hang this endpoint. That once left
+    // the systemd oneshot reaper stuck in "activating" for weeks, so the pool
+    // saturated with stale instances and every session hit "Browser is dead".
+    const CLOSE_TIMEOUT_MS = 20_000;
+    const closed: string[] = [];
+
+    await Promise.allSettled(
+      stale.map(
+        (instance) =>
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+              this.logger.error(
+                `Stale instance ${instance.id} did not close within ${CLOSE_TIMEOUT_MS}ms; abandoning wait`,
+              );
+              resolve();
+            }, CLOSE_TIMEOUT_MS);
+
+            instance.close().then(
+              () => {
+                clearTimeout(timer);
+                closed.push(instance.id);
+                resolve();
+              },
+              (e) => {
+                clearTimeout(timer);
+                this.logger.error(`Error closing stale instance ${instance.id}: ${e?.message ?? e}`);
+                resolve();
+              },
+            );
+          }),
+      ),
+    );
 
     return closed;
   }
