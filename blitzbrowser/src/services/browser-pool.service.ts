@@ -3,6 +3,7 @@ import { BrowserInstance } from 'src/components/browser-instance.component';
 import * as EventEmitter from 'events';
 import { ModuleRef } from '@nestjs/core';
 import { MaxBrowserReachedError } from 'src/errors/max-browser-reached.error';
+import { idleSeconds, isIdleStale } from 'src/services/stale';
 
 type PoolServiceEvents = {
   browser_instance_created: [BrowserInstance];
@@ -115,14 +116,15 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
   async closeStaleInstances(max_age_seconds: number): Promise<string[]> {
     const now = Date.now();
 
+    // Reap by IDLE time, not connection age: an instance being actively driven
+    // over CDP keeps refreshing last_activity_at, so a live submission is never
+    // torn down mid-flow. Only an instance that has gone silent past max_age
+    // (a leaked/half-open connection whose client is gone) is stale.
     const stale: BrowserInstance[] = [];
     for (const instance of this.#browser_instances.values()) {
-      const connected_at = instance.status.connected_at;
-      if (!connected_at) continue;
-
-      const age_seconds = (now - new Date(connected_at).getTime()) / 1000;
-      if (age_seconds > max_age_seconds) {
-        this.logger.log(`Closing stale instance ${instance.id} (age=${Math.floor(age_seconds)}s)`);
+      if (isIdleStale(instance.status, now, max_age_seconds)) {
+        const idle = Math.floor(idleSeconds(instance.status, now) ?? 0);
+        this.logger.log(`Closing stale instance ${instance.id} (idle=${idle}s)`);
         stale.push(instance);
       }
     }

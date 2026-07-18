@@ -1,6 +1,6 @@
 {
   "name": "@blitzbrowser/blitzbrowser",
-  "version": "1.6.5",
+  "version": "1.7.0",
   "description": "Deploying, scaling and managing headful browsers in docker.",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "rm -rf ./dist && nest build",
+    "test": "npm run build && node --test test/*.test.js",
+    "test:reap": "node test/reap-integration.mjs",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
   },

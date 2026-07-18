@@ -96,6 +96,14 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
         cdp_websocket_client.ping();
       }, 3000);
 
+      // A pong means the client is still connected and responsive, so the
+      // instance counts as active even when no CDP commands are in flight (e.g.
+      // the client is blocked waiting on a captcha solver). Keeps the idle reaper
+      // from tearing down a live-but-quiet session.
+      cdp_websocket_client.on('pong', () => {
+        browser_instance.noteClientAlive();
+      });
+
       cdp_websocket_client.on('close', () => {
         clearInterval(ping_interval_id);
         tunnel.close();

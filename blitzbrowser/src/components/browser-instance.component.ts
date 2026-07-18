@@ -116,6 +116,8 @@ export interface BrowserInstanceStatus {
 
   // Can happen anytime
   cdp_close_event_at: string | undefined;
+
+  last_activity_at: string | undefined;
 }
 
 export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
@@ -143,6 +145,10 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
   #browser_process_cdp_terminated_at: string | undefined;
   #completion_tasks_started_at: string | undefined;
   #cdp_close_event_at: string | undefined;
+
+  // Last time any CDP traffic flowed in either direction. Drives idle-based
+  // reaping: an actively-driven session keeps this fresh and is never reaped.
+  #last_activity_at: string | undefined;
 
   readonly #user_data_folder: string;
 
@@ -179,6 +185,23 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     return typeof this.#connected_at === 'string';
   }
 
+  get last_activity_at() {
+    return this.#last_activity_at;
+  }
+
+  #touch() {
+    this.#last_activity_at = new Date().toISOString();
+  }
+
+  // Called by the CDP gateway when the client answers a WebSocket ping. A pong
+  // proves the client is still connected and responsive, so an instance whose
+  // client is legitimately blocked (e.g. 30-90s waiting on a captcha solver, no
+  // CDP commands in flight) still counts as active and is never reaped. Only a
+  // dead/half-open connection stops ponging and becomes idle.
+  noteClientAlive() {
+    this.#touch();
+  }
+
   get cdp_terminated() {
     return typeof this.#browser_process_cdp_terminated_at === 'string';
   }
@@ -189,6 +212,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     }
 
     this.#connected_at = new Date().toISOString();
+    this.#last_activity_at = this.#connected_at;
     this.#tunnel = tunnel;
 
     this.#tunnel.on('closed', () => {
@@ -199,6 +223,8 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     this.#logger.log('Connecting tunnel.');
 
     this.#event_channel = this.#tunnel.createChannel(BrowserInstance.EVENT_CHANNEL_ID, async (data) => {
+      this.#touch();
+
       const event: BrowserInstanceEvent = JSON.parse(data.toString('utf8'));
 
       switch (event.type) {
@@ -501,10 +527,12 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
             });
 
             this.#cdp_channel = this.#tunnel.createChannel(BrowserInstance.CDP_CHANNEL_ID, data => {
+              this.#touch();
               this.#cdp_websocket.send(data.toString('utf8'), { binary: false });
             });
 
             this.#cdp_websocket.on('message', (data) => {
+              this.#touch();
               this.#cdp_channel.send(data.toString('utf8'));
             });
 
@@ -534,6 +562,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
       browser_process_cdp_terminated_at: this.#browser_process_cdp_terminated_at,
       completion_tasks_started_at: this.#completion_tasks_started_at,
       cdp_close_event_at: this.#cdp_close_event_at,
+      last_activity_at: this.#last_activity_at,
     } satisfies BrowserInstanceStatus;
   }
 
