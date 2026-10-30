@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, spawnSync } from 'child_process';
 import * as ProxyChain from 'proxy-chain';
 import * as EventEmitter from 'events';
 import { WebSocket } from 'ws';
@@ -9,6 +9,8 @@ import { UserDataService } from 'src/services/user-data.service';
 import * as fsPromise from 'fs/promises';
 import { TimezoneService } from 'src/services/timezone.service';
 import { BrowserPoolService, BrowserPoolStatus } from 'src/services/browser-pool.service';
+import { SessionMetrics } from 'src/services/session-metrics';
+import { PROFILES_ROOT } from 'src/services/profile-sweep';
 
 interface Stats {
   trgRxBytes: number;
@@ -170,7 +172,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     super();
     this.#browser_pool_service = this.module_ref.get(BrowserPoolService);
     this.#logger = new Logger(`${BrowserInstance.name}|${id}`);
-    this.#user_data_folder = `/home/pptruser/user-data/${id}`;
+    this.#user_data_folder = `${PROFILES_ROOT}/${id}`;
   }
 
   get vnc_enabled() {
@@ -368,64 +370,113 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     }
   }
 
-  async close() {
-    if (typeof this.#completion_tasks_started_at === 'string') {
-      return;
-    }
+  // Every caller (CDP close, tunnel close, process exit, the stale reaper) shares one
+  // close, so a repeat call waits for the real teardown instead of returning early and
+  // reporting an instance closed while it is still in the pool.
+  #closing: Promise<void> | undefined;
 
+  close(): Promise<void> {
+    return (this.#closing ??= this.#runCompletionTasks());
+  }
+
+  async #runCompletionTasks() {
     this.#completion_tasks_started_at = new Date().toISOString();
 
     this.#sendBrowserInstanceStatus();
 
     this.#logger.log('Starting completion tasks.');
 
-    if (this.#isBrowserProcessAlive()) {
-      this.#logger.log('Killing process');
+    try {
+      await this.#killBrowserProcess();
+
+      if (this.#cdp_websocket) {
+        this.#logger.log('Closing cdp websocket.');
+        this.#cdp_websocket.close();
+      }
+
+      if (this.#proxy_server) {
+        this.#logger.log('Closing proxy server.');
+        try {
+          await this.#proxy_server.close(true);
+        } catch (e) {
+          this.#logger.error('Error while closing proxy server', e?.stack);
+        }
+      }
 
       try {
-        await new Promise((res) => {
-          this.#browser_instance_process.once('exit', () => {
-            res(undefined);
-          });
-
-          this.#browser_instance_process.kill();
-        });
+        await this.#uploadUserData();
       } catch (e) {
-        this.#logger.error('Error while killing process', e?.stack);
+        this.#logger.error('Error while uploading user data', e?.stack || e);
       }
-    } else {
+    } finally {
+      // Always delete the profile and leave the pool, whatever failed above. Skipping
+      // this leaks the profile and keeps a dead instance holding a pool slot.
+      try {
+        this.#logger.log('Deleting user data.');
+        await fsPromise.rm(this.#user_data_folder, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 });
+      } catch (e) {
+        this.#logger.error('Error while deleting user data', e?.stack || e);
+      }
+
+      this.#logger.log('Completion tasks terminated.');
+      this.emit('terminated');
+    }
+  }
+
+  static readonly #PROCESS_EXIT_TIMEOUT_MS = 10_000;
+
+  // Asks the browser process to shut down, and force kills it if it has not exited in
+  // time. Waiting on 'exit' with no bound let one wedged Chrome hang close() forever.
+  async #killBrowserProcess() {
+    if (!this.#isBrowserProcessAlive()) {
       this.#logger.log('Process already killed.');
+      return;
     }
 
-    if (this.#cdp_websocket) {
-      this.#logger.log('Closing cdp websocket.');
-      this.#cdp_websocket.close();
-    }
+    this.#logger.log('Killing process');
 
-    if (this.#proxy_server) {
-      this.#logger.log('Closing proxy server.');
-      try {
-        await this.#proxy_server.close(true);
-      } catch (e) {
-        this.#logger.error('Error while closing proxy server', e?.stack);
+    const process_ref = this.#browser_instance_process;
+    const exited = new Promise<boolean>((res) => {
+      if (process_ref.exitCode !== null || process_ref.signalCode !== null) {
+        res(true);
+        return;
       }
+      process_ref.once('exit', () => res(true));
+    });
+
+    try {
+      process_ref.kill();
+    } catch (e) {
+      this.#logger.error('Error while killing process', e?.stack);
+    }
+
+    const timed_out = new Promise<boolean>((res) => setTimeout(() => res(false), BrowserInstance.#PROCESS_EXIT_TIMEOUT_MS));
+
+    if (await Promise.race([exited, timed_out])) {
+      return;
+    }
+
+    this.#logger.error(`Process did not exit within ${BrowserInstance.#PROCESS_EXIT_TIMEOUT_MS}ms. Force killing.`);
+    this.#forceKillBrowserProcesses();
+
+    await Promise.race([exited, new Promise((res) => setTimeout(res, 2_000))]);
+  }
+
+  // The process is spawned detached, so it leads its own process group, which holds
+  // the browser process wrapper plus Xvfb, fluxbox and x11vnc. Chrome is launched in a
+  // group of its own, so it is matched by its profile folder instead.
+  #forceKillBrowserProcesses() {
+    try {
+      process.kill(-this.#browser_instance_process.pid, 'SIGKILL');
+    } catch (e) {
+      this.#logger.error('Error while force killing process group', e?.message ?? e);
     }
 
     try {
-      await this.#uploadUserData();
+      spawnSync('pkill', ['-KILL', '-f', this.#user_data_folder]);
     } catch (e) {
-      this.#logger.error('Error while uploading user data', e?.stack || e);
+      this.#logger.error('Error while force killing chrome', e?.message ?? e);
     }
-
-    try {
-      this.#logger.log('Deleting user data.');
-      await fsPromise.rm(this.#user_data_folder, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 });
-    } catch (e) {
-      this.#logger.error('Error while deleting user data', e?.stack || e);
-    }
-
-    this.#logger.log('Completion tasks terminated.');
-    this.emit('terminated');
   }
 
   async #uploadUserData() {
@@ -448,6 +499,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
       `tini`,
       ['-s', `--`, `node`, `${__dirname}/../../dist/components/browser-instance.process.js`],
       {
+        detached: true,
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         env: {
           ...process.env,
@@ -520,6 +572,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
           this.#cdp_websocket.on('open', () => {
             this.#browser_process_cdp_connected_at = new Date().toISOString();
             this.#logger.log('CDP websocket connected');
+            SessionMetrics.shared.recordSessionStarted();
             this.#cdp_websocket.on('close', (code, reason) => {
               this.#browser_process_cdp_terminated_at = new Date().toISOString();
               this.#logger.log(`CDP Terminated ${code} ${reason.toString()}`);

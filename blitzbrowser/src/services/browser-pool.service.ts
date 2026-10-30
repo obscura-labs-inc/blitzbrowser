@@ -4,6 +4,8 @@ import * as EventEmitter from 'events';
 import { ModuleRef } from '@nestjs/core';
 import { MaxBrowserReachedError } from 'src/errors/max-browser-reached.error';
 import { idleSeconds, isIdleStale } from 'src/services/stale';
+import { Interval } from '@nestjs/schedule';
+import { sweepOrphanedProfiles } from 'src/services/profile-sweep';
 
 type PoolServiceEvents = {
   browser_instance_created: [BrowserInstance];
@@ -81,6 +83,21 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
       this.logger.log('SIGTERM received');
       this.shutdown();
     });
+
+    // The pool is empty at boot, so this clears every profile a previous run leaked.
+    await this.sweepProfiles();
+  }
+
+  @Interval(5 * 60 * 1000)
+  async sweepProfiles() {
+    try {
+      const removed = await sweepOrphanedProfiles(() => this.#browser_instances.keys());
+      if (removed.length > 0) {
+        this.logger.log(`Deleted ${removed.length} orphaned browser profile(s).`);
+      }
+    } catch (e) {
+      this.logger.error(`Error while sweeping orphaned browser profiles: ${e?.message ?? e}`);
+    }
   }
 
   getBrowserInstanceById(id: string): BrowserInstance | undefined {

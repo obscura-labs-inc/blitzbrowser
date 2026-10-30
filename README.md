@@ -175,7 +175,17 @@ The developer documentation is available at [https://docs.blitzbrowser.com](http
 - [Run any Google Chrome version](https://docs.blitzbrowser.com/features/google-chrome-versions)
 - [Configure your browser](https://docs.blitzbrowser.com/features/chrome-devtools-protocol)
 
+### CloudWatch session heartbeat
+
+Set `CLOUDWATCH_METRICS_NAMESPACE` (and `AWS_REGION`) to publish a `BrowserSessionsStarted` count to that CloudWatch namespace every time a session's Chrome comes up and connects over CDP. Credentials come from the standard AWS SDK chain (on EC2, the instance role; containers need an IMDS hop limit of 2). Unset, nothing is published. Alarm on the hourly sum to catch a box that has stopped doing work.
+
 ## Changelog
+
+### 1.7.1
+
+- Closing a browser instance force kills its process if it has not exited within 10 seconds, and always deletes the profile and frees the pool slot. A hung close used to keep the instance in the pool forever and leak its profile.
+- Leaked profiles (from container restarts or failed closes) are deleted at startup and every 5 minutes.
+- Optional CloudWatch session heartbeat (see above).
 
 ### 1.6.0
 

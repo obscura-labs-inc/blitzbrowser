@@ -69,7 +69,17 @@ class BrowserInstanceProcess {
                 // If the client disconnected, it means puppeteer is already closing the browser process.
                 // Calling close() if already closing corrupt the user data. I lost 5 days over this concurrent closing issue.
                 if (!this.#client_disconnected && this.#puppeteer_process.connected) {
-                    await this.#puppeteer_process.close();
+                    // A wedged Chrome (e.g. on a full disk) can ignore close() forever, which
+                    // stops this process from exiting and the parent from cleaning up.
+                    const closed = await Promise.race([
+                        this.#puppeteer_process.close().then(() => true),
+                        new Promise<boolean>((res) => setTimeout(() => res(false), 5000)),
+                    ]);
+
+                    if (!closed) {
+                        console.error('Browser did not close within 5000ms. Killing it.');
+                        this.#puppeteer_process.process()?.kill('SIGKILL');
+                    }
                 }
 
                 await this.#waitGoogleChromeKilled();
