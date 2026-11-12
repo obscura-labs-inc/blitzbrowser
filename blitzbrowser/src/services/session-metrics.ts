@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common';
  * role via IMDS, AWS_REGION).
  */
 export const SESSION_METRIC_NAME = 'BrowserSessionsStarted';
+export const INSTANCE_DEATH_METRIC_NAME = 'BrowserInstanceDeaths';
 
 export class SessionMetrics {
   static #instance: SessionMetrics | undefined;
@@ -49,6 +50,36 @@ export class SessionMetrics {
       )
       .catch((e) => {
         this.#logger.error(`Failed to publish ${SESSION_METRIC_NAME}: ${e?.message ?? e}`);
+      });
+  }
+
+  /**
+   * Fire-and-forget: one datapoint per instance death, tagged by Reason so an alarm can
+   * fire on abnormal deaths (process_exit / reaped_stale / cdp_terminated) and a dashboard
+   * can chart the mix. The parameterized process_exit(code=..,sig=..) reason is collapsed
+   * to a stable "process_exit" dimension so metric cardinality stays bounded.
+   */
+  recordInstanceDeath(reason: string) {
+    if (!this.#client) {
+      return;
+    }
+
+    const dimension = reason.startsWith('process_exit') ? 'process_exit' : reason;
+
+    this.#client
+      .send(
+        new PutMetricDataCommand({
+          Namespace: this.#namespace,
+          MetricData: [{
+            MetricName: INSTANCE_DEATH_METRIC_NAME,
+            Value: 1,
+            Unit: 'Count',
+            Dimensions: [{ Name: 'Reason', Value: dimension }],
+          }],
+        }),
+      )
+      .catch((e) => {
+        this.#logger.error(`Failed to publish ${INSTANCE_DEATH_METRIC_NAME}: ${e?.message ?? e}`);
       });
   }
 }

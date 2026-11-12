@@ -165,7 +165,7 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
               resolve();
             }, CLOSE_TIMEOUT_MS);
 
-            instance.close().then(
+            instance.close('reaped_stale').then(
               () => {
                 clearTimeout(timer);
                 closed.push(instance.id);
@@ -198,7 +198,7 @@ export class BrowserPoolService extends EventEmitter<PoolServiceEvents> implemen
         continue;
       }
 
-      await browser_instance.close();
+      await browser_instance.close('pool_shutdown');
     }
 
     setInterval(async () => {

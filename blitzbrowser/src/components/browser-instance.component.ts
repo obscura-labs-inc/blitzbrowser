@@ -219,7 +219,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
 
     this.#tunnel.on('closed', () => {
       this.#logger.log('Tunnel closed');
-      this.close();
+      this.close('tunnel_closed');
     })
 
     this.#logger.log('Connecting tunnel.');
@@ -237,7 +237,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
         case 'CDP_CLOSE':
           this.#cdp_close_event_at = new Date().toISOString();
           this.#logger.log('Received CDP Close event');
-          this.close();
+          this.close('cdp_close_event');
           break;
       }
     });
@@ -248,7 +248,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
       this.#sendBrowserInstanceStatus();
       this.#event_channel.send(JSON.stringify({ type: 'CDP_TERMINATED', status: this.status } satisfies CDPTerminatedEvent));
       this.#logger.log('CDP terminated, will now close.')
-      this.close();
+      this.close('cdp_terminated');
     });
 
     this.once('terminated', () => {
@@ -291,7 +291,7 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
       this.#sendBrowserInstanceStatus();
     } catch (e) {
       this.#logger.error('Error while doing preparation tasks', e?.stack || e);
-      this.close();
+      this.close('prep_error');
     }
   }
 
@@ -375,12 +375,21 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
   // reporting an instance closed while it is still in the pool.
   #closing: Promise<void> | undefined;
 
-  close(): Promise<void> {
-    return (this.#closing ??= this.#runCompletionTasks());
+  close(reason: string = 'unknown'): Promise<void> {
+    return (this.#closing ??= this.#runCompletionTasks(reason));
   }
 
-  async #runCompletionTasks() {
+  async #runCompletionTasks(reason: string = 'unknown') {
     this.#completion_tasks_started_at = new Date().toISOString();
+
+    // One structured line per death so we can tell WHY an instance went away:
+    // a Chrome crash (process_exit with a signal), a reaped idle/half-open instance,
+    // a client/tunnel disconnect, or a normal CDP close. lifetime/idle/in_use
+    // distinguish "reaped while actively driven" (a bug) from "reaped because dead".
+    const lifetime_ms = this.#connected_at ? Date.now() - new Date(this.#connected_at).getTime() : null;
+    const idle_ms = this.#last_activity_at ? Date.now() - new Date(this.#last_activity_at).getTime() : null;
+    this.#logger.log(`INSTANCE_DEATH reason=${reason} in_use=${this.in_use} cdp_connected=${!!this.#browser_process_cdp_connected_at} lifetime_ms=${lifetime_ms} idle_ms=${idle_ms}`);
+    SessionMetrics.shared.recordInstanceDeath(reason);
 
     this.#sendBrowserInstanceStatus();
 
@@ -541,8 +550,8 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
     this.#logger.log('Process launched');
 
     this.#browser_instance_process.once('exit', (e, i) => {
-      this.#logger.log(`Process exited ${e} ${i}`);
-      this.close();
+      this.#logger.log(`Process exited code=${e} signal=${i}`);
+      this.close(`process_exit(code=${e},sig=${i})`);
     });
 
     const start = Date.now();
@@ -571,7 +580,8 @@ export class BrowserInstance extends EventEmitter<BrowserInstanceEvents> {
 
           this.#cdp_websocket.on('open', () => {
             this.#browser_process_cdp_connected_at = new Date().toISOString();
-            this.#logger.log('CDP websocket connected');
+            const bringup_ms = this.#preparation_tasks_started_at ? Date.now() - new Date(this.#preparation_tasks_started_at).getTime() : null;
+            this.#logger.log(`CDP websocket connected (bringup_ms=${bringup_ms})`);
             SessionMetrics.shared.recordSessionStarted();
             this.#cdp_websocket.on('close', (code, reason) => {
               this.#browser_process_cdp_terminated_at = new Date().toISOString();
