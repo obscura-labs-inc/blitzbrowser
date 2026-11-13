@@ -14,6 +14,7 @@ import { Logger } from '@nestjs/common';
  */
 export const SESSION_METRIC_NAME = 'BrowserSessionsStarted';
 export const INSTANCE_DEATH_METRIC_NAME = 'BrowserInstanceDeaths';
+export const ACQUISITION_TIMEOUT_METRIC_NAME = 'BrowserAcquisitionTimeouts';
 
 export class SessionMetrics {
   static #instance: SessionMetrics | undefined;
@@ -80,6 +81,29 @@ export class SessionMetrics {
       )
       .catch((e) => {
         this.#logger.error(`Failed to publish ${INSTANCE_DEATH_METRIC_NAME}: ${e?.message ?? e}`);
+      });
+  }
+
+  /**
+   * Fire-and-forget: one datapoint each time a client connection waits out the pool
+   * acquisition window and is closed without ever getting a browser. This is pool
+   * saturation (backpressure), not a crash, so it is metered separately from
+   * BrowserInstanceDeaths, which only fires for instances that were actually created.
+   */
+  recordAcquisitionTimeout() {
+    if (!this.#client) {
+      return;
+    }
+
+    this.#client
+      .send(
+        new PutMetricDataCommand({
+          Namespace: this.#namespace,
+          MetricData: [{ MetricName: ACQUISITION_TIMEOUT_METRIC_NAME, Value: 1, Unit: 'Count' }],
+        }),
+      )
+      .catch((e) => {
+        this.#logger.error(`Failed to publish ${ACQUISITION_TIMEOUT_METRIC_NAME}: ${e?.message ?? e}`);
       });
   }
 }

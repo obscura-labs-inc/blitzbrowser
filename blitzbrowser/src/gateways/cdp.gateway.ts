@@ -6,6 +6,10 @@ import z from 'zod';
 import { Message, Tunnel } from '@blitzbrowser/tunnel';
 import { MaxBrowserReachedError } from 'src/errors/max-browser-reached.error';
 import { BrowserVersionService } from 'src/services/browser-version.service';
+import { SessionMetrics } from 'src/services/session-metrics';
+
+// Per-connection CONNTRACE logging is verbose debug tracing, off unless CONNTRACE=1.
+const CONNTRACE_ENABLED = process.env.CONNTRACE === '1' || process.env.CONNTRACE === 'true';
 
 export const PROXY_URL_QUERY_PARAM = 'proxyUrl';
 export const TIMEZONE_QUERY_PARAM = 'timezone';
@@ -48,12 +52,16 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
   }
 
   async connectCDP(cdp_websocket_client: WebSocket, url: URL) {
+    const conntrace_cid = url.searchParams.get('cid') ?? '-';
+    const conntrace_t0 = Date.now();
+    this.#conntrace(`cid=${conntrace_cid} event=connectCDP_entry`);
     let tunnel: Tunnel;
 
     try {
       const parsed_connection_options = this.#parseConnectionOptionQueryParams(url);
 
       if (!parsed_connection_options.success) {
+        this.#conntrace(`cid=${conntrace_cid} event=parse_fail`);
         cdp_websocket_client.close(CDPWebSocketGateway.BAD_REQUEST_CODE, parsed_connection_options.error.message.trim());
         return;
       }
@@ -90,7 +98,9 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
         return;
       }
 
+      this.#conntrace(`cid=${conntrace_cid} event=getinstance_start waited_ms=${Date.now() - conntrace_t0}`);
       const browser_instance: BrowserInstance = await this.#getBrowserInstance();
+      this.#conntrace(`cid=${conntrace_cid} event=got_instance id=${browser_instance.id} waited_ms=${Date.now() - conntrace_t0}`);
 
       const ping_interval_id = setInterval(() => {
         cdp_websocket_client.ping();
@@ -127,18 +137,31 @@ export class CDPWebSocketGateway implements OnModuleDestroy {
         } satisfies ConnectionOptions
       } satisfies ConnectionOptionsEvent)));
 
+      this.#conntrace(`cid=${conntrace_cid} event=ready id=${browser_instance.id} total_ms=${Date.now() - conntrace_t0}`);
       this.#logger.log('Sent connection options');
     } catch (e) {
       if (e instanceof MaxBrowserReachedError) {
-        tunnel.close();
+        this.#conntrace(`cid=${conntrace_cid} event=maxreached_4003 waited_ms=${Date.now() - conntrace_t0}`);
+        SessionMetrics.shared.recordAcquisitionTimeout();
+        // Close the client with 4003 before tunnel.close(): the tunnel 'closed' handler also
+        // closes the client socket with its default code, so closing here first is what actually
+        // delivers 4003 to the client and lets it tell pool backpressure apart from a real crash.
         cdp_websocket_client.close(CDPWebSocketGateway.NO_BROWSER_INSTANCE_AVAILABLE, 'No browser instance available.');
+        tunnel.close();
         return;
       }
 
+      this.#conntrace(`cid=${conntrace_cid} event=error ${e?.message ?? e}`);
       this.#logger.error(`Error while handling client websocket.`, e?.stack || e)
 
       cdp_websocket_client.close(CDPWebSocketGateway.INTERNAL_SERVER_ERROR_CODE, e?.stack || e);
       return;
+    }
+  }
+
+  #conntrace(message: string) {
+    if (CONNTRACE_ENABLED) {
+      this.#logger.log(`CONNTRACE ${message}`);
     }
   }
 

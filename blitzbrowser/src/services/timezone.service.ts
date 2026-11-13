@@ -6,13 +6,19 @@ export class TimezoneService {
 
     private readonly logger = new Logger(TimezoneService.name);
 
-    #default_timezone: Promise<string>;
+    #default_timezone: Promise<string | undefined>;
 
-    getDefaultTimezone() {
+    getDefaultTimezone(): Promise<string | undefined> {
         if (!this.#default_timezone) {
-            this.#default_timezone = new Promise(async (res) => {
-                res((await (await fetch('http://ip-api.com/json?fields=timezone')).json()).timezone);
-            });
+            this.#default_timezone = (async (): Promise<string | undefined> => {
+                try {
+                    const response = await fetch('http://ip-api.com/json?fields=timezone', { signal: AbortSignal.timeout(2000) });
+                    return (await response.json()).timezone;
+                } catch (e) {
+                    this.logger.error('Error while getting default timezone.', e as Error);
+                    return undefined;
+                }
+            })();
         }
 
         return this.#default_timezone;
@@ -22,6 +28,7 @@ export class TimezoneService {
         try {
             const url = new URL(proxy_url);
             const response = await axios.get('http://ip-api.com/json?fields=timezone', {
+                timeout: 2000,
                 proxy: {
                     protocol: url.protocol,
                     host: url.hostname,

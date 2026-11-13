@@ -8,6 +8,8 @@ import { BrowserPoolService } from 'src/services/browser-pool.service';
 import { BrowserInstanceWebSocketGateway } from './browser-instance.gateway';
 import { ApiKeyGuard } from 'src/guards/api-key.guard';
 
+const CONNTRACE_ENABLED = process.env.CONNTRACE === '1' || process.env.CONNTRACE === 'true';
+
 @Injectable()
 export class WebSocketGateway implements OnModuleInit {
 
@@ -29,6 +31,12 @@ export class WebSocketGateway implements OnModuleInit {
 
         cdp_websocket_server.on('connection', async (websocket_client, request) => {
             const url = new URL(`http://127.0.0.1${request.url}`);
+            if (CONNTRACE_ENABLED) {
+                const conntrace_cid = url.searchParams.get('cid') ?? '-';
+                this.#logger.log(`CONNTRACE cid=${conntrace_cid} event=ws_connection path=${url.pathname}`);
+                websocket_client.on('close', (code, reason) => this.#logger.log(`CONNTRACE cid=${conntrace_cid} event=ws_close code=${code} reason=${reason?.toString() ?? ''}`));
+                websocket_client.on('error', (err: any) => this.#logger.error(`CONNTRACE cid=${conntrace_cid} event=ws_error ${err?.message ?? err}`));
+            }
 
             if (!this.api_key_guard.canActivateWebsocket(request, url)) {
                 websocket_client.close(4000, 'Invalid API key.');
